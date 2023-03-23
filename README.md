@@ -5,7 +5,7 @@
 - 解析commit log文件
 - 解析consumer queue文件
 
-配置使用如下：
+配置config.json使用如下：
 ```json
 {
   "RocketmqDataHome": "RocketMQ数据根目录, 和broker配置中storePathRootDir一样",
