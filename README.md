@@ -56,7 +56,7 @@ go build
 ```
 再执行
 ```bash
-./rocketmq-decoder
+./rocketmq-decoder /Users/tigerweili/RocketMQ/rocketmq-decoder/config.json
 ```
 
 #### 解析结果参考
