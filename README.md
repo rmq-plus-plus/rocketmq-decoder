@@ -1,6 +1,7 @@
 ## 本项目支持解析rocketmq commit log文件和consumer queue文件
 
 ## 如何使用
+### 第一步，配置config.json
 - 配置config.json说明如下：
 ```json
 {
@@ -44,6 +45,19 @@
 
 ```
 
+### 第二步，启动程序
+#### 第一种：golang debug启动
+在golang中添加设置debug/run的配置文件启动路径
+<img src="https://raw.githubusercontent.com/rmq-plus-plus/rocketmq-decoder/main/images/02.png" />
 
-## 解析结果参考
+#### 第二种：打包执行
+```bash
+go build
+```
+再执行
+```bash
+./rocketmq-decoder
+```
+
+#### 解析结果参考
 <img src="https://raw.githubusercontent.com/rmq-plus-plus/rocketmq-decoder/main/images/01.png" />
