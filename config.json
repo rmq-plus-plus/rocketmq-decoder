@@ -1,6 +1,6 @@
 {
   "RocketmqDataHome": "/Users/tigerweili/data/dev/rocketmq-pop_data",
-  "Exec": "ReadFromConsumeOffset",
+  "Exec": "ReadCommitLog",
   "ReadFromConsumeOffset": {
     "QueueOffset": 0,
     "Topic": "test-topic",
@@ -8,5 +8,8 @@
   },
   "ReadCommitLogByOffset": {
     "CommitLogOffset": 0
+  },
+  "ReadCommitLog": {
+    "File": "/Users/tigerweili/data/code/github/gmq/test.txt"
   }
 }

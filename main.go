@@ -23,6 +23,8 @@ func main() {
 		readFromConsumeOffset(config.RocketmqDataHome, config.ReadFromConsumeOffset)
 	} else if strings.EqualFold(config.Exec, "ReadCommitLogByOffset") {
 		readCommitLogByOffset(config.RocketmqDataHome, config.ReadCommitLogByOffset.CommitLogOffset)
+	} else if strings.EqualFold(config.Exec, "ReadCommitLog") {
+		readCommitLog(config.ReadCommitLog.File, 0)
 	}
 }
 
@@ -31,6 +33,7 @@ type Config struct {
 	Exec                  string
 	ReadFromConsumeOffset ReadFromConsumeOffset
 	ReadCommitLogByOffset ReadCommitLogByOffset
+	ReadCommitLog         ReadCommitLog
 }
 type ReadFromConsumeOffset struct {
 	QueueOffset uint64
@@ -39,6 +42,9 @@ type ReadFromConsumeOffset struct {
 }
 type ReadCommitLogByOffset struct {
 	CommitLogOffset uint64
+}
+type ReadCommitLog struct {
+	File string
 }
 
 func loadConfig() *Config {
@@ -212,7 +218,12 @@ func readCommitLogByOffset(rootPath string, commitLogOffset uint64) {
 		return
 	}
 
-	f, err := os.Open(commitLogDataPath + theFileName)
+	readCommitLog(commitLogDataPath+theFileName, commitLogOffset)
+
+}
+
+func readCommitLog(file string, commitLogOffset uint64) {
+	f, err := os.Open(file)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -224,225 +235,229 @@ func readCommitLogByOffset(rootPath string, commitLogOffset uint64) {
 	byteArr8 := make([]byte, 8)
 
 	kvs := map[string]string{}
-	f.Seek(int64(commitLogOffset), 0)
-	// total size
-	var totalSize int32
-	{
-		f.Read(byteArr4)
-		buf := bytes.NewReader(byteArr4)
-		err := binary.Read(buf, binary.BigEndian, &totalSize)
-		if err != nil {
-			fmt.Println(err.Error())
+	if commitLogOffset > 0 {
+		f.Seek(int64(commitLogOffset), 0)
+	}
+	for {
+		// total size
+		var totalSize int32
+		{
+			f.Read(byteArr4)
+			buf := bytes.NewReader(byteArr4)
+			err := binary.Read(buf, binary.BigEndian, &totalSize)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			if totalSize <= 0 {
+				fmt.Println("已经读取完毕")
+			}
+			kvs["message total size"] = fmt.Sprintf("%d", totalSize)
 		}
-		if totalSize <= 0 {
-			fmt.Println("已经读取完毕")
+
+		var magicCode int32
+		{
+			f.Read(byteArr4)
+			buf := bytes.NewReader(byteArr4)
+			err := binary.Read(buf, binary.BigEndian, &magicCode)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message magic code"] = fmt.Sprintf("%d", magicCode)
 		}
-		kvs["message total size"] = fmt.Sprintf("%d", totalSize)
-	}
 
-	var magicCode int32
-	{
-		f.Read(byteArr4)
-		buf := bytes.NewReader(byteArr4)
-		err := binary.Read(buf, binary.BigEndian, &magicCode)
-		if err != nil {
-			fmt.Println(err.Error())
+		var bodyCrc int32
+		{
+			f.Read(byteArr4)
+			buf := bytes.NewReader(byteArr4)
+			err := binary.Read(buf, binary.BigEndian, &bodyCrc)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message body crc"] = fmt.Sprintf("%d", bodyCrc)
 		}
-		kvs["message magic code"] = fmt.Sprintf("%d", magicCode)
-	}
 
-	var bodyCrc int32
-	{
-		f.Read(byteArr4)
-		buf := bytes.NewReader(byteArr4)
-		err := binary.Read(buf, binary.BigEndian, &bodyCrc)
-		if err != nil {
-			fmt.Println(err.Error())
+		var queueId int32
+		{
+			f.Read(byteArr4)
+			buf := bytes.NewReader(byteArr4)
+			err := binary.Read(buf, binary.BigEndian, &queueId)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message queue id"] = fmt.Sprintf("%d", queueId)
 		}
-		kvs["message body crc"] = fmt.Sprintf("%d", bodyCrc)
-	}
 
-	var queueId int32
-	{
-		f.Read(byteArr4)
-		buf := bytes.NewReader(byteArr4)
-		err := binary.Read(buf, binary.BigEndian, &queueId)
-		if err != nil {
-			fmt.Println(err.Error())
+		var flag int32
+		{
+			f.Read(byteArr4)
+			buf := bytes.NewReader(byteArr4)
+			err := binary.Read(buf, binary.BigEndian, &flag)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message flag"] = fmt.Sprintf("%d", flag)
 		}
-		kvs["message queue id"] = fmt.Sprintf("%d", queueId)
-	}
 
-	var flag int32
-	{
-		f.Read(byteArr4)
-		buf := bytes.NewReader(byteArr4)
-		err := binary.Read(buf, binary.BigEndian, &flag)
-		if err != nil {
-			fmt.Println(err.Error())
+		var queueOffset int64
+		{
+			f.Read(byteArr8)
+			buf := bytes.NewReader(byteArr8)
+			err := binary.Read(buf, binary.BigEndian, &queueOffset)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message queue offset"] = fmt.Sprintf("%d", queueOffset)
 		}
-		kvs["message flag"] = fmt.Sprintf("%d", flag)
-	}
 
-	var queueOffset int64
-	{
-		f.Read(byteArr8)
-		buf := bytes.NewReader(byteArr8)
-		err := binary.Read(buf, binary.BigEndian, &queueOffset)
-		if err != nil {
-			fmt.Println(err.Error())
+		var pyOffset int64
+		{
+			f.Read(byteArr8)
+			buf := bytes.NewReader(byteArr8)
+			err := binary.Read(buf, binary.BigEndian, &pyOffset)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message commit log offset"] = fmt.Sprintf("%d", pyOffset)
 		}
-		kvs["message queue offset"] = fmt.Sprintf("%d", queueOffset)
-	}
 
-	var pyOffset int64
-	{
-		f.Read(byteArr8)
-		buf := bytes.NewReader(byteArr8)
-		err := binary.Read(buf, binary.BigEndian, &pyOffset)
-		if err != nil {
-			fmt.Println(err.Error())
+		var sysFlag int32
+		{
+			f.Read(byteArr4)
+			buf := bytes.NewReader(byteArr4)
+			err := binary.Read(buf, binary.BigEndian, &sysFlag)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message sysFlag"] = fmt.Sprintf("%d", sysFlag)
 		}
-		kvs["message commit log offset"] = fmt.Sprintf("%d", pyOffset)
-	}
 
-	var sysFlag int32
-	{
-		f.Read(byteArr4)
-		buf := bytes.NewReader(byteArr4)
-		err := binary.Read(buf, binary.BigEndian, &sysFlag)
-		if err != nil {
-			fmt.Println(err.Error())
+		var bornTs int64
+		{
+			f.Read(byteArr8)
+			buf := bytes.NewReader(byteArr8)
+			err := binary.Read(buf, binary.BigEndian, &bornTs)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message born time"] = common.FormatTimestamp(bornTs)
 		}
-		kvs["message sysFlag"] = fmt.Sprintf("%d", sysFlag)
-	}
 
-	var bornTs int64
-	{
-		f.Read(byteArr8)
-		buf := bytes.NewReader(byteArr8)
-		err := binary.Read(buf, binary.BigEndian, &bornTs)
-		if err != nil {
-			fmt.Println(err.Error())
+		{
+			var bornPort uint32
+			f.Read(byteArr4)
+			kvs["message born host"] = net.IPv4(byteArr4[0], byteArr4[1], byteArr4[2], byteArr4[3]).String()
+
+			f.Read(byteArr4)
+			buf1 := bytes.NewReader(byteArr4)
+			binary.Read(buf1, binary.BigEndian, &bornPort)
+
+			kvs["message born port"] = fmt.Sprintf("%d", bornPort)
 		}
-		kvs["message born time"] = common.FormatTimestamp(bornTs)
-	}
 
-	{
-		var bornPort uint32
-		f.Read(byteArr4)
-		kvs["message born host"] = net.IPv4(byteArr4[0], byteArr4[1], byteArr4[2], byteArr4[3]).String()
-
-		f.Read(byteArr4)
-		buf1 := bytes.NewReader(byteArr4)
-		binary.Read(buf1, binary.BigEndian, &bornPort)
-
-		kvs["message born port"] = fmt.Sprintf("%d", bornPort)
-	}
-
-	var storeTs int64
-	{
-		f.Read(byteArr8)
-		buf := bytes.NewReader(byteArr8)
-		err := binary.Read(buf, binary.BigEndian, &storeTs)
-		if err != nil {
-			fmt.Println(err.Error())
+		var storeTs int64
+		{
+			f.Read(byteArr8)
+			buf := bytes.NewReader(byteArr8)
+			err := binary.Read(buf, binary.BigEndian, &storeTs)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			kvs["message store time"] = common.FormatTimestamp(storeTs)
 		}
-		kvs["message store time"] = common.FormatTimestamp(storeTs)
-	}
 
-	{
-		f.Read(byteArr4)
-		kvs["message store host"] = net.IPv4(byteArr4[0], byteArr4[1], byteArr4[2], byteArr4[3]).String()
+		{
+			f.Read(byteArr4)
+			kvs["message store host"] = net.IPv4(byteArr4[0], byteArr4[1], byteArr4[2], byteArr4[3]).String()
 
-		var storePort uint32
-		f.Read(byteArr4)
-		buf1 := bytes.NewReader(byteArr4)
-		binary.Read(buf1, binary.BigEndian, &storePort)
+			var storePort uint32
+			f.Read(byteArr4)
+			buf1 := bytes.NewReader(byteArr4)
+			binary.Read(buf1, binary.BigEndian, &storePort)
 
-		kvs["message store port"] = fmt.Sprintf("%d", storePort)
-	}
+			kvs["message store port"] = fmt.Sprintf("%d", storePort)
+		}
 
-	{
-		var reconsumeTimes uint32
+		{
+			var reconsumeTimes uint32
 
-		f.Read(byteArr4)
-		buf1 := bytes.NewReader(byteArr4)
-		binary.Read(buf1, binary.BigEndian, &reconsumeTimes)
+			f.Read(byteArr4)
+			buf1 := bytes.NewReader(byteArr4)
+			binary.Read(buf1, binary.BigEndian, &reconsumeTimes)
 
-		kvs["message reconsume times"] = fmt.Sprintf("%d", reconsumeTimes)
-	}
+			kvs["message reconsume times"] = fmt.Sprintf("%d", reconsumeTimes)
+		}
 
-	{
-		var transOffset uint64
+		{
+			var transOffset uint64
 
-		f.Read(byteArr8)
-		buf1 := bytes.NewReader(byteArr8)
-		binary.Read(buf1, binary.BigEndian, &transOffset)
+			f.Read(byteArr8)
+			buf1 := bytes.NewReader(byteArr8)
+			binary.Read(buf1, binary.BigEndian, &transOffset)
 
-		kvs["message prepared transaction offset"] = fmt.Sprintf("%d", transOffset)
-	}
+			kvs["message prepared transaction offset"] = fmt.Sprintf("%d", transOffset)
+		}
 
-	{
-		var bodyLength uint32
-		f.Read(byteArr4)
-		buf1 := bytes.NewReader(byteArr4)
-		binary.Read(buf1, binary.BigEndian, &bodyLength)
+		{
+			var bodyLength uint32
+			f.Read(byteArr4)
+			buf1 := bytes.NewReader(byteArr4)
+			binary.Read(buf1, binary.BigEndian, &bodyLength)
 
-		var leng = int(bodyLength)
-		kvs["message body length"] = fmt.Sprintf("%d", leng)
+			var leng = int(bodyLength)
+			kvs["message body length"] = fmt.Sprintf("%d", leng)
 
-		byteArr := make([]byte, bodyLength)
+			byteArr := make([]byte, bodyLength)
 
-		f.Read(byteArr)
-		kvs["message body"] = string(byteArr)
-	}
-
-	{
-		var topicLength uint8
-
-		f.Read(byteArr1)
-		buf1 := bytes.NewReader(byteArr1)
-		binary.Read(buf1, binary.BigEndian, &topicLength)
-
-		kvs["message topic length"] = fmt.Sprintf("%d", topicLength)
-
-		byteArr := make([]byte, int(topicLength))
-
-		f.Read(byteArr)
-		kvs["message topic"] = string(byteArr)
-
-	}
-
-	{
-		var propertyLength uint16
-
-		f.Read(byteArr2)
-		buf1 := bytes.NewReader(byteArr2)
-		binary.Read(buf1, binary.BigEndian, &propertyLength)
-
-		kvs["message property length"] = fmt.Sprintf("%d", propertyLength)
-		if propertyLength > 0 {
-			byteArr := make([]byte, int(propertyLength))
 			f.Read(byteArr)
-			var a []byte
-			a = append(a, 2)
-			var b []byte
-			b = append(b, 1)
-			pkvs := bytes.Split(byteArr, a)
-			if len(pkvs) > 0 {
-				for k := range pkvs {
-					kv := pkvs[k]
-					kvBytes := bytes.Split(kv, b)
-					kvs["message property "+string(kvBytes[0])] = string(kvBytes[1])
+			kvs["message body"] = string(byteArr)
+		}
+
+		{
+			var topicLength uint8
+
+			f.Read(byteArr1)
+			buf1 := bytes.NewReader(byteArr1)
+			binary.Read(buf1, binary.BigEndian, &topicLength)
+
+			kvs["message topic length"] = fmt.Sprintf("%d", topicLength)
+
+			byteArr := make([]byte, int(topicLength))
+
+			f.Read(byteArr)
+			kvs["message topic"] = string(byteArr)
+
+		}
+
+		{
+			var propertyLength uint16
+
+			f.Read(byteArr2)
+			buf1 := bytes.NewReader(byteArr2)
+			binary.Read(buf1, binary.BigEndian, &propertyLength)
+
+			kvs["message property length"] = fmt.Sprintf("%d", propertyLength)
+			if propertyLength > 0 {
+				byteArr := make([]byte, int(propertyLength))
+				f.Read(byteArr)
+				var a []byte
+				a = append(a, 2)
+				var b []byte
+				b = append(b, 1)
+				pkvs := bytes.Split(byteArr, a)
+				if len(pkvs) > 0 {
+					for k := range pkvs {
+						kv := pkvs[k]
+						kvBytes := bytes.Split(kv, b)
+						kvs["message property "+string(kvBytes[0])] = string(kvBytes[1])
+					}
 				}
 			}
 		}
-	}
 
-	fmt.Println("============commit log message start======================")
-	for k, v := range kvs {
-		fmt.Println(fmt.Sprintf("%s = %v", k, v))
+		fmt.Println("============commit log message start======================")
+		for k, v := range kvs {
+			fmt.Println(fmt.Sprintf("%s = %v", k, v))
+		}
+		fmt.Println("============commit log message end======================")
 	}
-	fmt.Println("============commit log message end======================")
 }
