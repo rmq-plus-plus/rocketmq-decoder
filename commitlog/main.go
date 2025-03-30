@@ -22,7 +22,7 @@ func main() {
 	if strings.EqualFold(config.Exec, "ReadFromConsumeOffset") {
 		readFromConsumeOffset(config.RocketmqDataHome, config.ReadFromConsumeOffset)
 	} else if strings.EqualFold(config.Exec, "ReadCommitLogByOffset") {
-		readCommitLogByOffset(config.RocketmqDataHome, config.ReadCommitLogByOffset.CommitLogOffset)
+		readCommitLog(config.ReadCommitLogByOffset.File, config.ReadCommitLogByOffset.CommitLogOffset)
 	} else if strings.EqualFold(config.Exec, "ReadCommitLog") {
 		readCommitLog(config.ReadCommitLog.File, 0)
 	}
@@ -42,6 +42,7 @@ type ReadFromConsumeOffset struct {
 }
 type ReadCommitLogByOffset struct {
 	CommitLogOffset uint64
+	File            string
 }
 type ReadCommitLog struct {
 	File string
@@ -250,6 +251,7 @@ func readCommitLog(file string, commitLogOffset uint64) {
 			}
 			if totalSize <= 0 {
 				fmt.Println("已经读取完毕")
+				return
 			}
 			kvs["message total size"] = fmt.Sprintf("%d", totalSize)
 		}
@@ -447,6 +449,9 @@ func readCommitLog(file string, commitLogOffset uint64) {
 				if len(pkvs) > 0 {
 					for k := range pkvs {
 						kv := pkvs[k]
+						if len(kv) == 0 {
+							continue
+						}
 						kvBytes := bytes.Split(kv, b)
 						kvs["message property "+string(kvBytes[0])] = string(kvBytes[1])
 					}
@@ -459,5 +464,9 @@ func readCommitLog(file string, commitLogOffset uint64) {
 			fmt.Println(fmt.Sprintf("%s = %v", k, v))
 		}
 		fmt.Println("============commit log message end======================")
-	}
+
+		if commitLogOffset > 0 {
+			break
+		}
+	} // end for
 }
